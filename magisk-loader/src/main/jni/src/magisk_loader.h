@@ -29,7 +29,7 @@ namespace lspd {
     class MagiskLoader : public Context {
     public:
         inline static void Init() {
-            instance_ = std::make_unique<MagiskLoader>();
+            instance_ = std::make_unique<MagiskLoader>();  // 单例模式
         }
 
         inline static MagiskLoader *GetInstance() {

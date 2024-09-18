@@ -45,7 +45,7 @@ namespace lspd {
     constexpr int SHARED_RELRO_UID = 1037;
     constexpr int PER_USER_RANGE = 100000;
 
-    static constexpr uid_t kAidInjected = INJECTED_AID;
+    static constexpr uid_t kAidInjected = INJECTED_AID;  // gradle injects this
     static constexpr uid_t kAidInet = 3003;
 
     void MagiskLoader::LoadDex(JNIEnv *env, PreloadedDex &&dex) {
@@ -150,6 +150,7 @@ namespace lspd {
                                                jstring nice_name,
                                                jboolean is_child_zygote,
                                                jstring app_data_dir) {
+        // 一个特殊的进程处理，uid 2000
         if (uid == kAidInjected) {
             int array_size = gids ? env->GetArrayLength(gids) : 0;
             auto region = std::make_unique<jint[]>(array_size + 1);
@@ -160,10 +161,12 @@ namespace lspd {
             if (gids) env->SetIntArrayRegion(gids, 0, 1, region.get() + array_size);
             gids = new_gids;
         }
+        // 如果已经执行，这里就不会执行了，以防万一
         Service::instance()->InitService(env);
         const auto app_id = uid % PER_USER_RANGE;
         JUTFString process_name(env, nice_name);
         skip_ = false;
+        // 做了一些判断，如果不符合条件就跳过
         if (!skip_ && !app_data_dir) {
             LOGD("skip injecting into {} because it has no data dir", process_name.get());
             skip_ = true;

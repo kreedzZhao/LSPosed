@@ -278,6 +278,8 @@ namespace lspd {
         auto bridge_service_name = JNI_NewStringUTF(env, SYSTEM_SERVER_BRIDGE_SERVICE_NAME);
         ScopedLocalRef<jobject> binder{env, nullptr};
         for (int i = 0; i < 3; ++i) {
+            // (android.os.ServiceManager).getService("serial")
+            // returned IBinder to interact with the serial hardware service.
             binder = JNI_CallStaticObjectMethod(env, service_manager_class_,
                                                 get_service_method_, bridge_service_name);
             if (binder) {
