@@ -437,6 +437,8 @@ public class ConfigFileManager {
 
     synchronized static SharedMemory getPreloadDex(boolean obfuscate) {
         if (preloadDex == null) {
+            // 获取当前路径
+            Log.d(TAG, "Fetching preload dex from " + daemonApkPath + "/framework/lspd.dex");
             try (var is = new FileInputStream("framework/lspd.dex")) {
                 preloadDex = readDex(is, obfuscate);
             } catch (Throwable e) {

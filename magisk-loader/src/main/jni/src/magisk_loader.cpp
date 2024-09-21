@@ -49,6 +49,27 @@ namespace lspd {
     static constexpr uid_t kAidInet = 3003;
 
     void MagiskLoader::LoadDex(JNIEnv *env, PreloadedDex &&dex) {
+        /*
+        ClassLoader sysClassLoader = ClassLoader.getSystemClassLoader();
+        if (sysClassLoader == null) {
+            System.err.println("getSystemClassLoader failed!!!");
+            return;
+        }
+
+        Class<?> inMemoryClassLoaderClass = Class.forName("dalvik.system.InMemoryDexClassLoader");
+        Constructor<?> constructor = inMemoryClassLoaderClass.getConstructor(
+                ByteBuffer.class, ClassLoader.class);
+        ByteBuffer dexBuffer = ByteBuffer.wrap(dex.data());
+
+        try {
+            Object inMemoryClassLoader = constructor.newInstance(dexBuffer, sysClassLoader);
+            injectClassLoader = inMemoryClassLoader;
+        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+            System.err.println("InMemoryDexClassLoader creation failed!!!");
+            e.printStackTrace();
+            return;
+        }
+         */
         auto classloader = JNI_FindClass(env, "java/lang/ClassLoader");
         auto getsyscl_mid = JNI_GetStaticMethodID(
                 env, classloader, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
@@ -101,20 +122,29 @@ namespace lspd {
                 LOGF("Failed to get system server binder, system server initialization failed.");
                 return;
             }
-
+            // TODO: 这里目前理解：尝试获取应用的 binder，如果获取不到，就使用 system server 的 binder
             auto application_binder = instance->RequestApplicationBinderFromSystemServer(env, system_server_binder);
 
             // Call application_binder directly if application binder is available,
             // or we proxy the request from system server binder
             auto &&next_binder = application_binder ? application_binder : system_server_binder;
+            // 这里测试是获取不到 application_binder
+            // 通过远程调用获取到了 dex_fd 和 size system/framework/lspd.dex
             const auto [dex_fd, size] = instance->RequestLSPDex(env, next_binder);
+            // 获取 obfuscation_map
             auto obfs_map = instance->RequestObfuscationMap(env, next_binder);
+            // 设置 obfuscation_map
             ConfigBridge::GetInstance()->obfuscation_map(std::move(obfs_map));
+            // 最终目的，加载 dex 到系统的类加载器中
+            // native 层使用 InMemoryDexClassLoader 加载 dex
             LoadDex(env, PreloadedDex(dex_fd, size));
+            // 加载完之后关闭文件描述符
             close(dex_fd);
+            // 提供给管理器使用 替换 JNI 方法表中的一些方法，达到服务的替换
             instance->HookBridge(*this, env);
 
             if (application_binder) {
+                //
                 lsplant::InitInfo initInfo{
                     .inline_hooker = [](auto t, auto r) {
                         void* bk = nullptr;
@@ -133,6 +163,12 @@ namespace lspd {
                 InitArtHooker(env, initInfo);
                 InitHooks(env);
                 SetupEntryClass(env);
+                /*
+                 * forkCommon 方法的作用：
+                 * 1. 完成 Zygote 进程 fork 操作：当 Android 应用启动时，系统不会直接创建新的进程，而是通过 Zygote 进程 fork 出一个新的进程来启动应用。Zygote 进程预先加载了常见的系统类和资源，因此通过 fork 可以加快应用进程的启动速度。
+                 * 2. 在新 fork 出来的子进程中进行初始化：在 fork 出的子进程中，forkCommon 会做一些子进程初始化操作，如重定向标准输入/输出流、设置环境变量、启动类加载器等。
+                 * Zygote 用来创建新进程的方法，任意的 APP 进程都必须经过
+                 */
                 FindAndCall(env, "forkCommon",
                             "(ZLjava/lang/String;Ljava/lang/String;Landroid/os/IBinder;)V",
                             JNI_TRUE, JNI_NewStringUTF(env, "system"), nullptr, application_binder);

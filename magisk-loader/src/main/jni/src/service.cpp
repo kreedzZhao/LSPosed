@@ -157,6 +157,51 @@ namespace lspd {
     }
 
     void Service::HookBridge(const Context &context, JNIEnv *env) {
+        /*
+        if (kHooked) return;
+        if (!initialized) return;
+        kHooked = true;
+
+        try {
+            bridgeServiceClass = context.findClassFromCurrentLoader(GetBridgeServiceName());
+            if (bridgeServiceClass == null) {
+                System.err.println("server class not found");
+                return;
+            }
+
+            String hookerSig = "(Landroid/os/IBinder;IJJI)Z";
+
+            execTransactReplaceMethod = bridgeServiceClass.getDeclaredMethod("execTransact", IBinder.class, int.class, long.class, long.class, int.class);
+            if (execTransactReplaceMethod == null) {
+                System.err.println("execTransact class not found");
+                return;
+            }
+
+            replaceActivityControllerMethod = bridgeServiceClass.getDeclaredMethod("replaceActivityController", IBinder.class, int.class, long.class, long.class, int.class);
+            if (replaceActivityControllerMethod == null) {
+                System.err.println("replaceActivityShell class not found");
+            }
+
+            replaceShellCommandMethod = bridgeServiceClass.getDeclaredMethod("replaceShellCommand", IBinder.class, int.class, long.class, long.class, int.class);
+            if (replaceShellCommandMethod == null) {
+                System.err.println("replaceShellCommand class not found");
+            }
+
+            Class<?> binderClass = Class.forName("android.os.Binder");
+            execTransactBackupMethod = binderClass.getDeclaredMethod("execTransact", int.class, long.class, long.class, int.class);
+
+            // Assuming setTableOverride is a native method you have implemented
+            setTableOverride();
+
+            Class<?> activityThreadClass = Class.forName("android.app.IActivityManager$Stub");
+            Field setActivityControllerField = activityThreadClass.getDeclaredField("TRANSACTION_setActivityController");
+            SET_ACTIVITY_CONTROLLER_CODE = setActivityControllerField.getInt(null);
+
+            System.out.println("Done InitService");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+         */
         static bool kHooked = false;
         // This should only be ran once, so unlikely
         if (kHooked) [[unlikely]] return;
@@ -276,6 +321,7 @@ namespace lspd {
         // Get Binder for LSPSystemServerService.
         // The binder itself was inject into system service "serial"
         auto bridge_service_name = JNI_NewStringUTF(env, SYSTEM_SERVER_BRIDGE_SERVICE_NAME);
+        // 超出作用域自动释放
         ScopedLocalRef<jobject> binder{env, nullptr};
         for (int i = 0; i < 3; ++i) {
             // (android.os.ServiceManager).getService("serial")
@@ -298,22 +344,28 @@ namespace lspd {
     }
 
     ScopedLocalRef<jobject> Service::RequestApplicationBinderFromSystemServer(JNIEnv *env, const ScopedLocalRef<jobject> &system_server_binder) {
+        // new binder
         auto heart_beat_binder = JNI_NewObject(env, binder_class_, binder_ctor_);
         Wrapper wrapper{env, this};
 
+        // getuid, getpid, "system", heart_beat_binder
         JNI_CallVoidMethod(env, wrapper.data, write_int_method_, getuid());
         JNI_CallVoidMethod(env, wrapper.data, write_int_method_, getpid());
         JNI_CallVoidMethod(env, wrapper.data, write_string_method_, JNI_NewStringUTF(env, "system"));
         JNI_CallVoidMethod(env, wrapper.data, write_strong_binder_method_, heart_beat_binder);
 
+        // binder 令牌 1598837584 客户端发送请求
         auto res = wrapper.transact(system_server_binder, BRIDGE_TRANSACTION_CODE);
 
         ScopedLocalRef<jobject> app_binder = {env, nullptr};
         if (res) {
+            // catch exception
             JNI_CallVoidMethod(env, wrapper.reply, read_exception_method_);
+            // read strong binder
             app_binder = JNI_CallObjectMethod(env, wrapper.reply, read_strong_binder_method_);
         }
         if (app_binder) {
+            // 保持心跳
             JNI_NewGlobalRef(env, heart_beat_binder);
         }
         LOGD("app_binder: {}", static_cast<void*>(app_binder.get()));
@@ -322,13 +374,17 @@ namespace lspd {
 
     std::tuple<int, size_t> Service::RequestLSPDex(JNIEnv *env, const ScopedLocalRef<jobject> &binder) {
         Wrapper wrapper{env, this};
+        // 1310096052
         bool res = wrapper.transact(binder, DEX_TRANSACTION_CODE);
         if (!res) {
             LOGE("Service::RequestLSPDex: transaction failed?");
             return {-1, 0};
         }
+        // parcel file descriptor
         auto parcel_fd = JNI_CallObjectMethod(env, wrapper.reply, read_file_descriptor_method_);
+        // parcel fd
         int fd = JNI_CallIntMethod(env, parcel_fd, detach_fd_method_);
+        // parcel size
         auto size = static_cast<size_t>(JNI_CallLongMethod(env, wrapper.reply, read_long_method_));
         LOGD("fd={}, size={}", fd, size);
         return {fd, size};

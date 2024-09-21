@@ -85,6 +85,8 @@ public class LSPApplicationService extends ILSPApplicationService.Stub {
         Log.d(TAG, "LSPApplicationService.onTransact: code=" + code);
         switch (code) {
             case DEX_TRANSACTION_CODE: {
+                // SharedMemory 指向文件 framework/lspd.dex，查看 Magisk 的目录就会知道
+                // 默认会进行混淆，混淆处理在 so 层
                 var shm = ConfigManager.getInstance().getPreloadDex();
                 if (shm == null) return false;
                 // assume that write only a fd
