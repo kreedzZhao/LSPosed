@@ -92,6 +92,7 @@ LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, hookMethod, jboolean useModernApi, j
 #endif
     auto target = env->FromReflectedMethod(hookMethod);
     HookItem * hook_item = nullptr;
+    // hooked_methods 为一个线程安全的 map，全局保存了所有 hook 的方法
     hooked_methods.lazy_emplace_l(target, [&hook_item](auto &it) {
         hook_item = it.second.get();
     }, [&hook_item, &target, &newHook](const auto &ctor) {
@@ -100,12 +101,16 @@ LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, hookMethod, jboolean useModernApi, j
         ctor(target, std::move(ptr));
         newHook = true;
     });
+    // 如果没有被 hook 过
     if (newHook) {
+        // 反射调用 com.kreedz.Signature
         auto init = env->GetMethodID(hooker, "<init>", "(Ljava/lang/reflect/Executable;)V");
+        // 等效与 invoke
         auto callback_method = env->ToReflectedMethod(hooker, env->GetMethodID(hooker, "callback",
                                                                                "([Ljava/lang/Object;)Ljava/lang/Object;"),
                                                       false);
         auto hooker_object = env->NewObject(hooker, init, hookMethod);
+        //
         hook_item->SetBackup(lsplant::Hook(env, hookMethod, hooker_object, callback_method));
         env->DeleteLocalRef(hooker_object);
     }
@@ -125,6 +130,7 @@ LSP_DEF_NATIVE_METHOD(jboolean, HookBridge, hookMethod, jboolean useModernApi, j
                 .before_method = env->FromReflectedMethod(before_method),
                 .after_method = env->FromReflectedMethod(after_method),
         };
+        // 插入到 modern_callbacks 中
         hook_item->modern_callbacks.emplace(priority, callback_type);
     } else {
         hook_item->legacy_callbacks.emplace(priority, env->NewGlobalRef(callback));

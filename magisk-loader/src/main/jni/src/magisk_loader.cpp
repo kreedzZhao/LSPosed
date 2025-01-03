@@ -101,6 +101,7 @@ namespace lspd {
     }
 
     void MagiskLoader::SetupEntryClass(JNIEnv *env) {
+        // org.lsposed.lspd.core.Main
         if (auto entry_class = FindClassFromLoader(env, GetCurrentClassLoader(),
                                                    GetEntryClassName())) {
             entry_class_ = JNI_NewGlobalRef(env, entry_class);
@@ -109,6 +110,7 @@ namespace lspd {
 
     void
     MagiskLoader::OnNativeForkSystemServerPre(JNIEnv *env) {
+        // 最早的时机 先初始化 service
         Service::instance()->InitService(env);
         setAllowUnload(skip_);
     }
@@ -251,8 +253,11 @@ namespace lspd {
             close(dex_fd);
             InitArtHooker(env, initInfo);
             InitHooks(env);
+            // org.lsposed.lspd.core.Main 导入 Dex 调用的关键方法
             SetupEntryClass(env);
             LOGD("Done prepare");
+            // forkCommon(ZLjava/lang/String;Ljava/lang/String;Landroid/os/IBinder;)V
+            // 这里调用了 forkCommon 方法，这个方法是在 org.lsposed.lspd.core.Main 中的
             FindAndCall(env, "forkCommon",
                         "(ZLjava/lang/String;Ljava/lang/String;Landroid/os/IBinder;)V",
                         JNI_FALSE, nice_name, app_dir, binder);

@@ -35,6 +35,7 @@ namespace lspd {
         constexpr static jint DEX_TRANSACTION_CODE = 1310096052;
         constexpr static jint OBFUSCATION_MAP_TRANSACTION_CODE = 724533732;
         constexpr static jint BRIDGE_TRANSACTION_CODE = 1598837584;
+        // sv 表示轻量级字符串访问，只拥有只读访问权限
         constexpr static auto BRIDGE_SERVICE_DESCRIPTOR = "LSPosed"sv;
         constexpr static auto BRIDGE_SERVICE_NAME = "activity"sv;
         constexpr static auto SYSTEM_SERVER_BRIDGE_SERVICE_NAME = "serial"sv;
@@ -80,6 +81,7 @@ namespace lspd {
         void HookBridge(const Context& context, JNIEnv *env);
         lsplant::ScopedLocalRef<jobject> RequestBinder(JNIEnv *env, jstring nice_name);
 
+        // 初始化完成，最先调用的方法
         lsplant::ScopedLocalRef<jobject> RequestSystemServerBinder(JNIEnv *env);
 
         lsplant::ScopedLocalRef<jobject> RequestApplicationBinderFromSystemServer(JNIEnv *env, const lsplant::ScopedLocalRef<jobject> &system_server_binder);

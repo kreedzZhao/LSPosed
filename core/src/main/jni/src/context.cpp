@@ -60,6 +60,7 @@ namespace lspd {
     }
 
     void Context::InitHooks(JNIEnv *env) {
+        // inject_class_loader_ 保证注入的 dex 文件 trusted
         auto path_list = JNI_GetObjectFieldOf(env, inject_class_loader_, "pathList",
                                               "Ldalvik/system/DexPathList;");
         if (!path_list) {
